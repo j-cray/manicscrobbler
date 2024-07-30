@@ -9,6 +9,12 @@ use serde::{Deserialize, Serialize};
 use libsodium::{crypto_secretbox_easy, crypto_secretbox_open_easy, randombytes_buf, crypto_secretbox_KEYBYTES};
 
 #[derive(Serialize, Deserialize)]
+
+enum KeyGenState {
+    KeyGenerated([u8; crypto_secretbox_KEYBYTES]),
+    KeyGenerationFailed,
+    KeyCopied,
+}
 struct Settings {
     spotify_client_id: String,
     spotify_client_secret: String,
@@ -22,6 +28,7 @@ struct ManicScrobbler {
     notion: NotionApi,
     db: Db,
     settings: Option<Settings>,
+    key_gen_state:Signal<KeyGenState>
 }
 
 struct Settings {
@@ -87,6 +94,25 @@ impl app for ManicScrobbler {
         )
     }
 
+    //modal dialogue for key copying
+    fn show_key_modal(&self, key: [u8; crypto_secretbox_KEYBYTES]) {
+        let modal = Modal::new(self).content(
+            Column::new()
+                .width(Length::Fill)
+                .padding(20.0)
+                .spacing(20,0)
+                .push(Text::new(format!("{:?}", key))) //display the key
+                .push(
+                    Row::new().spacing(20.0).push(
+                        Button::new()
+                        .text("Copy") //replace text with icon
+                        .on_click(move |_| {
+                            self.key_gen_state.set(KeyGenState::KeyCopied);
+                            //implement clipboard functionality here
+                        })
+                    )
+                )
+        );
 
 fn main() {
     ManicScrobbler::run();
@@ -96,10 +122,30 @@ fn main() {
 fn generate_key(&self) -> [u8; crypto_secretbox_KEYBYTES] {
     let mut key = [0u8; crypto_secretbox_KEYBYTES];
     randombytes_buf(&mut key);
+    self.key_gen_state.set(KeyGenState::KeyGenerated(key));
+        let mut key = [0u8; crypto_secretbox_KEYBYTES];
+    if randombytes_buf(&mut key).is_err() {
+        self.key_gen_state.set(KeyGenState::KeyGenerationFailed);
+        return key; //is this line necessary
+    } else {
+    self.key_gen_state.set(KeyGenState::KeyGenerated(key));
+    };
+
     //show popup with key displayed so user can copy it
     self.show_key_modal(key);
     //function may need to pause here until user has copied the key
-
+    Cmd::mew(move |_| {
+        while let KeyGenState::KeyGenerated(_) = self.key_gen_state.get() {
+        //might need to yield control here to prevent blocking ui
+        }
+        if let KeyGenState::KeyGenerationFailed = self.key_gen_state.get() {
+            error!("Key generation failed"); //expand on error handling
+        } else if let KeyGenState::KeyCopied = self.key_gen_state.get() {
+            info!("Key copied"); //is this line necessary if KeyGenState::KeyCopied is set by the modal dialogue?
+        } else {
+            error!("Unknown key generation state");
+        }
+    });
     key
 }
 
