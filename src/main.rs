@@ -34,11 +34,30 @@ impl app for ManicScrobbler {
 
         let db: Db = sled::open("settings.db").unwrap();
         let settings = load_settings(&db);
-        let spotify = AuthCodeSpotify::with_config(
-            Credentials::from_env().unwrap(),
-            OAuth::from_env(Some("http://localhost:8888/callback")),
-            Config::default()
-        );
+        let spotify = if let Some(settings) = &settings {
+            let creds = Credentials {
+                id: settings.spotify_client_id.clone(),
+                secret: Some(settings.spotify_client_secret.clone()),
+            };
+            let oauth = if let Some(settings) = &settings {
+                // use redirect uri from settings
+                OAuth::from_env(Some(&settings.spotify_redirect_uri))
+            } else {
+                //fallback to default or handle differently
+                OAuth::from_env(Some("http://localhost:8888/callback"))
+            };
+            AuthCodeSpotify::with_config(creds, oauth, Config::default())
+        } else {
+            //handle cases where settings are not loaded
+            AuthCodeSpotify::with_config(
+                Credentials {
+                    id: "YOUR_SPOTIFY_CLIENT_ID".to.string(), //Placeholder
+                    secret: Some("YOUR_SPOTIFY_CLIENT_SECRET".to.string()), //Placeholder
+                },
+                OAuth::from_env(Some("http://localhost:8888/callback")),
+                Config::default(),
+            )
+        };
 
         let app = Self {
                 count: reactive(0),
@@ -56,6 +75,7 @@ impl app for ManicScrobbler {
         Cmd::none()
     }
 
+    // main window
     fn view (&self) -> View {
         View::new(self).content(
             Column::new()
