@@ -7,6 +7,7 @@ use notion::NotionApi;
 use sled::Db;
 use serde::{Deserialize, Serialize};
 use libsodium::{crypto_secretbox_easy, crypto_secretbox_open_easy, randombytes_buf, crypto_secretbox_KEYBYTES};
+use arboard::Clipboard;
 
 #[derive(Serialize, Deserialize)]
 
@@ -107,11 +108,17 @@ impl app for ManicScrobbler {
                         Button::new()
                         .text("Copy") //replace text with icon
                         .on_click(move |_| {
-                            self.key_gen_state.set(KeyGenState::KeyCopied);
-                            //implement clipboard functionality here
-                        })
+                            //implement clipboard functionality
+                            let mut clipboard = Clipboard::new().unwrap();
+                            match clipboard.set_text(format!("{:?}", key)) {
+                                Ok(_) => { info!("Key copied to clipboard"); self.key_gen_state.set(KeyGenState::KeyCopied); }, //replace copy icon with check mark to indicate success
+                                Err(e) => error!("Failed to copy key to clipboard: {}", e), //replace copy icon with error icon maybe?
+                            };
+                            Cmd::none()
+                        }),
                     )
                 )
+
         );
 
 fn main() {
@@ -119,6 +126,7 @@ fn main() {
 }
 
 //generate key for encryption and decryption of settingss stored in the database
+//make this be activated by a button in settings, and send a notification to the user that they should click the button
 fn generate_key(&self) -> [u8; crypto_secretbox_KEYBYTES] {
     let mut key = [0u8; crypto_secretbox_KEYBYTES];
     randombytes_buf(&mut key);
