@@ -34,11 +34,17 @@ impl app for ManicScrobbler {
 
         let db: Db = sled::open("settings.db").unwrap();
         let settings = load_settings(&db);
+        let spotify = AuthCodeSpotify::with_config(
+            Credentials::from_env().unwrap(),
+            OAuth::from_env(Some("http://localhost:8888/callback")),
+            Config::default()
+        );
+
         let app = Self {
                 count: reactive(0),
                 db,
                 settings,
-                spotify: AuthCodeSpotify::new(Config::default()),
+                spotify,
                 notion: NotionApi::new("placeholder_token".to_string()),
         };
         (app,Cmd::none())
