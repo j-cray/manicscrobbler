@@ -1,11 +1,12 @@
 use log::{error, info};
 use floem::{reactive::*, App, Cmd, View, Widget};
 use notion::chrono::format;
-use rspotify::{prelude::*, scopes, AuthCodeSpotify, Config, Credentials, OAuth, Token,};
+use rspotify::{prelude::*, scopes, AuthCodeSpotify, Config, Credentials, OAuth, Token};
 use notion::ids::DatabaseId;
 use notion::NotionApi;
 use sled::Db;
 use serde::{Deserialize, Serialize};
+use libsodium::{crypto_secretbox_easy, crypto_secretbox_open_easy, randombytes_buf, crypto_secretbox_KEYBYTES};
 
 #[derive(Serialize, Deserialize)]
 struct Settings {
@@ -91,6 +92,18 @@ fn main() {
     ManicScrobbler::run();
 }
 
+//generate key for encryption and decryption of settingss stored in the database
+fn generate_key(&self) -> [u8; crypto_secretbox_KEYBYTES] {
+    let mut key = [0u8; crypto_secretbox_KEYBYTES];
+    randombytes_buf(&mut key);
+    //show popup with key displayed so user can copy it
+    self.show_key_modal(key);
+    //function may need to pause here until user has copied the key
+
+    key
+}
+
+
 fn save_settings(&self, db: &Db, settings: &Settings) -> Result<(), sled::Error> {
     let encrypted_settings = encrypt_settings(settings);
     let encoded_settings = bincode::serialize(&encrypted_settings).unwrap();
@@ -105,5 +118,7 @@ fn load_settings(db: &Db) -> Option<Settings> {
         Some(decrypt_settings(&decoded))
     } else {
         None
-    }
+}
+
+
 }
