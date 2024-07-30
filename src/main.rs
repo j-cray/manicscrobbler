@@ -9,38 +9,43 @@ use serde::{Deserialize, Serialize};
 use libsodium::{crypto_secretbox_easy, crypto_secretbox_open_easy, randombytes_buf, crypto_secretbox_KEYBYTES};
 use arboard::Clipboard;
 
-#[derive(Serialize, Deserialize)]
-
-enum KeyGenState {
-    KeyGenerated([u8; crypto_secretbox_KEYBYTES]),
-    KeyGenerationFailed,
-    KeyCopied,
-}
-struct Settings {
-    spotify_client_id: String,
-    spotify_client_secret: String,
-    notion_api_token: String,
-}
+// structures //
 
 #[derive(Clone)]
 struct ManicScrobbler {
-    count: R<i32>,
     spotify: AuthCodeSpotify,
     notion: NotionApi,
     db: Db,
     settings: Option<Settings>,
-    key_gen_state:Signal<KeyGenState>
+    key_gen_state:Signal<KeyGenState>,
+    current_view: Signal<CurrentView>,
+    // view_main: Signal::new(CurrentView::Main),
+    // view_settings: Signal::new(CurrentView::Settings),
+    modal_visible: Signal<bool>,
 }
 
+//settings
+#[derive(Serialize, Deserialize)]
 struct Settings {
     spotify_client_id: String,
     spotify_client_secret: String,
     notion_api_token: String,
-
 }
+
+// app
 impl app for ManicScrobbler {
     fn new() -> (Self, Cmd) {
 
+        enum KeyGenState {
+            KeyGenerated([u8; crypto_secretbox_KEYBYTES]),
+            KeyGenerationFailed,
+            KeyCopied,
+        }
+        //view switching
+        enum CurrentView {
+            Main,
+            Settings,
+        }
         let db: Db = sled::open("settings.db").unwrap();
         let settings = load_settings(&db);
         let spotify = if let Some(settings) = &settings {
@@ -69,59 +74,238 @@ impl app for ManicScrobbler {
         };
 
         let app = Self {
-                count: reactive(0),
+                key_gen_state: Signal::new(KeyGenState::KeyGenerationFailed),
+                current_view: Signal::new(CurrentView::Main), //if this is set, will it force main view always on?
                 db,
                 settings,
                 spotify,
                 notion: NotionApi::new("placeholder_token".to_string()),
+
         };
         (app,Cmd::none())
 
         }
     }
 
-    fn update(&mut self, _msg:  ()) -> Cmd {
+    fn update(&mut self, _msg:  ()) -> Cmd { //what does this snippet do? lol
         Cmd::none()
     }
 
-    // main window
+    //UI//
     fn view (&self) -> View {
-        View::new(self).content(
-            Column::new()
-                .push(
-                    Text::new(format!("Count: {}", self.count.get()))
-                        .size(30)
-                ),
-        )
-    }
+        if self.current_view.get() == CurrentView::Main {} //render main view
+        else if self.current_view.get() == CurrentView::Settings {}//render settings view
+        if self.modal_visible.get() {
+            self.show_key_modal(self.key_gen_state.get().unwrap()); // Assuming KeyGenerated holds the key
+}
 
-    //modal dialogue for key copying
-    fn show_key_modal(&self, key: [u8; crypto_secretbox_KEYBYTES]) {
-        let modal = Modal::new(self).content(
-            Column::new()
-                .width(Length::Fill)
-                .padding(20.0)
-                .spacing(20,0)
-                .push(Text::new(format!("{:?}", key))) //display the key
-                .push(
-                    Row::new().spacing(20.0).push(
-                        Button::new()
-                        .text("Copy") //replace text with icon
-                        .on_click(move |_| {
-                            //implement clipboard functionality
-                            let mut clipboard = Clipboard::new().unwrap();
-                            match clipboard.set_text(format!("{:?}", key)) {
-                                Ok(_) => { info!("Key copied to clipboard"); self.key_gen_state.set(KeyGenState::KeyCopied); }, //replace copy icon with check mark to indicate success
-                                Err(e) => error!("Failed to copy key to clipboard: {}", e), //replace copy icon with error icon maybe?
-                            };
-                            Cmd::none()
-                        }),
-                    )
-                )
+        }
 
-        );
+            //main view
+            fn view_main(&self) -> View {
+                View::new(self).content(
+                    Column::new()
+                            .width(Length::Fill)
+                            .padding(20.0)
+                            .spacing(20,0)
+                            .push(
+                                Button::new()
+                                    .text("Update Notion")
+                                    .on_click(move |world| {
+                                        // Call the update_notion function
+                                        let cmd = world.get::<ManicScrobbler>().update_notion(); // Or just self.update_notion() if it's a method
+                                        // Dispatch the command if necessary
+                                        if let Some(cmd) = cmd {
+                                            world.dispatch(cmd); 
+                                        }
+                                    }),
+                            )
+                            .push(
+                                Column::new()
+                                    .width(Length::Fill)
+                                    .padding(20.0)
+                                    .spacing(20,0)
+                                    .push(
+                                        Button::new()
+                                            .text("Settings") // replace with icon
+                                            .on_click(move |world| {
+                                                self.current_view.set(CurrentView::Settings)
+                                            }),
+                                        ),
+                                ),
+                    );
+                };
 
-fn main() {
+            // settings view
+            fn view_settings(&self) -> View {
+                View::new(self).content(
+                    Column::new()
+                        .width(Length::Fill)
+                        .padding(20.0)
+                        .spacing(20,0),
+                        Row::new()
+                            .spacing(20.0)
+                            .padding(20.0)
+                            .push(
+                                // Back button
+                                Button::new()
+                                    .text("Back")
+                                    .on_click(move |world| {
+                                        self.current_view.set(CurrentView::Main)
+                                    }),
+                                ),
+                        Row::new()
+                            .spacing(20.0)
+                            .padding(20.0)
+                            .push(
+                                // Save button
+                                Button::new()
+                                    .text("Save")
+                                    .on_click(move |world| {
+                                        // Access the TextInput values and create a new Settings instance
+                                        // ...
+                                        // Save the settings (using self.save_settings or a similar method)
+                                        // ...
+                                        // Optionally show a success message or feedback
+                                        // ...
+                                        Cmd::none()
+                                    }),
+                                )
+                        .push(
+                            Column::new()
+                                .width(Length::Fill)
+                                .padding(20.0)
+                                .spacing(20,0)
+                                // spotify settings
+                                .push(
+                                    Row::new()
+                                        .spacing(20.0)
+                                        .padding(20.0)
+                                        .push(
+                                            Text::new("Spotify")
+                                            .size(20)
+                                        )
+                                    )    
+                                .push(
+                                    Row::new()
+                                        .spacing(20.0)
+                                        .padding(20.0)
+                                        .push(TextInput::new().placeholder("Client ID").text(
+                                            if let Some(settings) = &self.settings {
+                                                settings.spotify_client_id.clone()
+                                            } else {
+                                                "".to_string()
+                                            },
+                                        ))
+                                    )
+                                .push(
+                                    Row::new()
+                                        .spacing(20.0)
+                                        .padding(20.0)
+                                        .push(TextInput::new().placeholder("Client Secret").text(
+                                            if let Some(settings) = &self.settings {
+                                                settings.spotify_client_secret.clone()
+                                            } else {
+                                                "".to_string()
+                                            },
+                                        ))
+                                    )
+                                .push(
+                                    Row::new()
+                                        .spacing(20.0)
+                                        .padding(20.0)
+                                        .push(TextInput::new().placeholder("Redirect URI").text(
+                                            if let Some(settings) = &self.settings {
+                                                settings.spotify_redirect_uri.clone()
+                                            } else {
+                                                "".to_string()
+                                            },
+                                        )),
+                                    )
+                                .push(
+                                    // Notion settings
+                                    Row::new()
+                                        .padding(20.0)
+                                        .spacing(10.0)
+                                        .push(Text::new("Notion").size(20.0))
+                                        .push(
+                                            Row::new()
+                                                .spacing(20.0)
+                                                .padding(20.0)
+                                            .push(TextInput::new().placeholder("API Token").text(
+                                                if let Some(settings) = &self.settings {
+                                                    settings.notion_api_token.clone()
+                                                } else {
+                                                    "".to_string()
+                                                },
+                                            )),
+                                        )
+                                    )
+                                .push(
+                                    // Key generation
+                                    Row::new()
+                                        .spacing(20.0)
+                                        .padding(20.0)
+                                        .push(
+                                            Button::new()
+                                                .text("Generate Key")
+                                                .on_click(move |world| {
+                                                    // Set modal_visible to true
+                                                    world.get::<ManicScrobbler>().modal_visible.set(true);
+                                                    // Show the modal dialog
+                                                    // world.get::<ManicScrobbler>().show_key_modal(); 
+                                                    Cmd::none()
+                                                }),
+                                            ),
+                                    )
+                            )
+                    );
+                }
+
+            //modal dialogue for key copying
+            fn show_key_modal(&self, key: [u8; crypto_secretbox_KEYBYTES]) {
+                let modal = Modal::new(self).content(
+                    Column::new()
+                        .width(Length::Fill)
+                        .padding(20.0)
+                        .spacing(20,0)
+                        .push(Text::new(format!("{:?}", key))) //display the key
+                        .push(
+                            Row::new().spacing(20.0).push(
+                                Button::new()
+                                .text("Copy") //replace text with icon
+                                .on_click(move |_| {
+                                    //use clipboard functionality
+                                    let mut clipboard = Clipboard::new().unwrap();
+                                    match clipboard.set_text(format!("{:?}", key)) {
+                                        Ok(_) => { info!("Key copied to clipboard"); self.key_gen_state.set(KeyGenState::KeyCopied); }, //replace copy icon with check mark to indicate success
+                                        Err(e) => error!("Failed to copy key to clipboard: {}", e), //replace copy icon with error icon maybe?
+                                    };
+                                    Cmd::none()
+                                }),
+                            )
+                        )
+                        .push(
+                            Row::new().spacing(20.0).push(
+                                Button::new()
+                                .text("Continue") // replace text with icon
+                                .enabled(self.key_gen_state.map(|state| *state == KeyGenState::KeyCopied)) //enable only when key has been copied
+                                .on_click(move |_| {
+                                    Cmd::new(move |world| {
+                                        world.get::<ManicScrobbler>().modal_visible.set(false); 
+                                        Cmd::none()
+                                    })
+                                }),
+                            )
+                        )
+                    );
+                }
+      }
+
+
+//functions//
+
+fn update_notion() {
     ManicScrobbler::run();
 }
 
@@ -134,7 +318,7 @@ fn generate_key(&self) -> [u8; crypto_secretbox_KEYBYTES] {
         let mut key = [0u8; crypto_secretbox_KEYBYTES];
     if randombytes_buf(&mut key).is_err() {
         self.key_gen_state.set(KeyGenState::KeyGenerationFailed);
-        return key; //is this line necessary
+        return key;
     } else {
     self.key_gen_state.set(KeyGenState::KeyGenerated(key));
     };
@@ -172,7 +356,7 @@ fn load_settings(db: &Db) -> Option<Settings> {
         Some(decrypt_settings(&decoded))
     } else {
         None
-}
+    }
 
 
 }
