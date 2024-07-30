@@ -1,0 +1,11 @@
+{
+"editor.minimap.enabled": false,
+"workbench.preferredDarkColorTheme": "Monokai Pro (Filter Spectrum)",
+"workbench.tips.enabled": false,
+"nix.enableLanguageServer": true,
+"nix.serverPath": "nil",
+"IDX.aI.enableInlineCompletion": true,
+"IDX.aI.enableCodebaseIndexing": true,
+"editor.fontFamily": "'Monaspace Argon Var', 'monospace', monospace",
+"editor.fontSize": 15
+}
