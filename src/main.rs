@@ -16,7 +16,6 @@ struct ManicScrobbler {
     db: Db,
     settings: Option<Settings>,
     current_view: Signal<CurrentView>,
-    modal_visible: Signal<bool>,
 }
 
 //settings
@@ -66,7 +65,6 @@ impl app for ManicScrobbler {
         };
 
         let app = Self {
-                modal_visible: Signal::new(false),
                 current_view: Signal::new(CurrentView::Main),
                 db,
                 settings,
