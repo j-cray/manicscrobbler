@@ -17,11 +17,11 @@
     # Search for the extensions you want on https://open-vsx.org/ and use "publisher.id"
     extensions = [
       "rust-lang.rust-analyzer"
-      "serayuzgur.crates"
       "bungcip.better-toml"
       "usernamehw.errorlens"
       "jnoortheen.nix-ide"
       "monokai.theme-monokai-pro-vscode"
+      "fill-labs.dependi"
     ];
 
     # Enable previews
